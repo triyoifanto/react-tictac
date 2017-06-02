@@ -1,8 +1,26 @@
 import React, { Component } from 'react'
 import {Stage} from 'react-konva'
 import {Board, Squares} from '../styled/TicTacToe'
+import Relay from 'react-relay'
+import TuringTest from '../styled/TuringTest'
+import CreateGame from '../mutations/CreateGame'
 
 class TicTacToe extends Component {
+
+    constructor(props){
+        super(props)
+
+        this.combos =[
+            [0,1,2],
+            [3,4,5],
+            [6,7,8],
+            [0,3,6],
+            [1,4,7],
+            [2,5,8],
+            [0,4,8],
+            [2,4,6]
+        ]
+    }
 
     state ={
         rows: 3,
@@ -37,22 +55,95 @@ class TicTacToe extends Component {
         })
     }
 
-    move = () => {
-        console.log('Move made', marker, index)
+    move = (index, marker) => {
+        this.setState((prevState, prop) => {
+            let {gameState, yourTurn, gameOver, winner} = prevState
+            yourTurn = !yourTurn
+            gameState.splice(index, 1, marker)
+            let foundWin = this.winChecker(gameState)
+            if(foundWin){
+                winner = gameState[foundWin[0]]
+            }
+            if(foundWin || !gameState.includes(false)){
+                gameOver = true
+            }
+            if(!yourTurn && !gameOver) {
+                this.makeAiMove(gameState)
+            }
+            return{
+                gameState,
+                yourTurn,
+                gameOver,
+                win: foundWin || false,
+                winner
+            }
+        })
         //placeholder
     }
 
-    makeAiMove = () => {
+    makeAiMove = (gameState) => {
+        let otherMark = this.state.otherMark
+        let openSquares = []
+        gameState.forEach((square, index) => {
+            if(!square) {
+                openSquares.push(index)
+            }
+        })
+        let aiMove = openSquares[this.random(0, openSquares.length)]
+        setTimeout(() => {
+            this.move(aiMove,otherMark)
+        }, 1000)        
         //placeholder
+    }
+
+    random = (min, max) => {
+        min = Math.ceil(min)
+        max = Math.floor(max)
+        return Math.floor(Math.random() * (max-min)) + min
+    }
+
+    winChecker = (gameState) => {
+        let combos = this.combos
+        return combos.find((combo) => {
+            let[a,b,c] = combo
+            return (gameState[a] === gameState[b] && gameState[a] === gameState[c] && gameState[a])
+        })
     }
 
     turingTest = () => {
-
+    if (this.state.gameOver) {
+      return (
+        <TuringTest
+          recordGame={this.recordGame}
+        />
+      )
     }
+  }
 
-    recordgame = () => {
-
+    recordGame = (guess) => {
+    let { user } = this.props.viewer
+    let { relay } = this.props
+    let { winner, ownMark} = this.state
+    if (user) {
+      let winnerId = (winner === ownMark) ? user.id : undefined
+      let guessCorrect = (guess === 'ROBOT') ? true : false
+      relay.commitUpdate(
+        new CreateGame({
+          user,
+          winnerId,
+          guess,
+          guessCorrect
+        })
+      )
     }
+    this.setState({
+      gameState: new Array(9).fill(false),
+      gameOver: false,
+      yourTurn: true,
+      winner: false,
+      win: false
+    })
+  }
 
     render(){
         let {
@@ -77,7 +168,7 @@ class TicTacToe extends Component {
                     rows={rows}
                     size={size}
                 />
-                <Square
+                <Squares
                     unit={unit}
                     coordinates={coordinates}
                     gameState={gameState}
@@ -88,10 +179,24 @@ class TicTacToe extends Component {
                     move={this.move}
                 />
                 </Stage>
+                {this.turingTest()}
             </div>            
         )
     }
 }
 
 
-export default TicTacToe
+export default Relay.createContainer(
+    TicTacToe, {
+        fragments: {
+            viewer: () => Relay.ql`
+                fragment on Viewer {
+                    user {
+                        id
+                    }
+                }
+            `,
+
+        }
+    }
+)
